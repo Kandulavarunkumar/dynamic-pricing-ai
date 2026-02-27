@@ -1,7 +1,4 @@
 flask
-scikit-learn
-pandas
-matplotlib
+gunicorn
 psycopg2-binary
 requests
-gunicorn

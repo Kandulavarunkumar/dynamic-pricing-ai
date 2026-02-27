@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Pricing History</h2>
+<table border="1">
+<tr>
+<th>Product</th>
+<th>Demand</th>
+<th>Recommended</th>
+<th>Date</th>
+</tr>
+{% for row in data %}
+<tr>
+<td>{{ row[0] }}</td>
+<td>{{ row[1] }}</td>
+<td>{{ row[2] }}</td>
+<td>{{ row[3] }}</td>
+</tr>
+{% endfor %}
+</table>
+{% endblock %}
