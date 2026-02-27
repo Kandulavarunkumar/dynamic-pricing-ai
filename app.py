@@ -1,88 +1,59 @@
-from flask import Flask, render_template, request, redirect, session, jsonify
+from flask import Flask, render_template, request
 import os
-
-app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "devkey")
-
-# DO NOT connect to DB here at import time
-from model import predict_price
+from database import get_connection
 from competitor_api import get_competitor_prices
-from database import get_connection
-from auth import auth
-from flask import Flask
-from database import get_connection
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "devkey")
+app.secret_key = os.getenv("SECRET_KEY", "fallback_secret")
 
-app.register_blueprint(auth)
 
-# Home Page
-@app.route("/", methods=["GET", "POST"])
-def index():
-    result = None
-    profit = None
-    prices = None
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+
+@app.route("/predict", methods=["POST"])
+def predict():
+    product = request.form.get("product")
+    demand = request.form.get("demand")
+
+    if not product or not demand:
+        return "Missing data", 400
+
+    demand = float(demand)
+
+    prices = get_competitor_prices(product)
+
+    amazon = prices["amazon"]
+    flipkart = prices["flipkart"]
+    meesho = prices["meesho"]
+
+    recommended = (amazon + flipkart + meesho) / 3 + demand * 5
+
     try:
-    conn = get_connection()
-    if conn:
+        conn = get_connection()
         cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO pricing_history
-            (demand, amazon, flipkart, meesho, recommended)
-            VALUES (%s,%s,%s,%s,%s)
-        """, (demand, amazon, flipkart, meesho, result))
+        cur.execute(
+            "INSERT INTO pricing_history (product, demand, amazon, flipkart, meesho, recommended) VALUES (%s,%s,%s,%s,%s,%s)",
+            (product, demand, amazon, flipkart, meesho, recommended)
+        )
         conn.commit()
         cur.close()
         conn.close()
-except Exception as e:
-    print("Database error:", e)
+    except Exception as e:
+        print("DB ERROR:", e)
 
-    if request.method == "POST":
-        demand = float(request.form["demand"])
-        product = request.form["product"]
-
-        prices = get_competitor_prices(product)
-        amazon = prices["amazon"]
-        flipkart = prices["flipkart"]
-        meesho = prices["meesho"]
-
-        result = predict_price(demand, amazon, flipkart, meesho)
-        profit = round(result - 800, 2)
-
-        try:
-            conn = get_connection()
-            cur = conn.cursor()
-            cur.execute("""
-                INSERT INTO pricing_history 
-                (demand, amazon, flipkart, meesho, recommended)
-                VALUES (%s,%s,%s,%s,%s)
-            """, (demand, amazon, flipkart, meesho, result))
-            conn.commit()
-            cur.close()
-            conn.close()
-        except Exception as e:
-            print("DB Error:", e)
-
-    return render_template("index.html", result=result, profit=profit, prices=prices)
-
-
-@app.route("/admin")
-def admin():
-    if not session.get("admin"):
-        return redirect("/login")
-    return render_template("admin.html")
-
-
-@app.route("/live-data")
-def live_data():
-    import random
-    return jsonify({"price": random.randint(1200, 1800)})
+    return render_template("index.html",
+                           amazon=amazon,
+                           flipkart=flipkart,
+                           meesho=meesho,
+                           recommended=recommended)
 
 
 @app.route("/health")
 def health():
     return "OK", 200
-    @app.route("/")
-def home():
-    return "Dynamic Pricing AI Running", 200
+
+
+if __name__ == "__main__":
+    app.run()
